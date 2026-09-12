@@ -191,7 +191,10 @@ def main() -> None:
                     st.caption("Installed models: " + ", ".join(sorted(installed)))
                 st.caption("Models are never downloaded automatically.")
 
-        generate = st.button("Generate Report", type="primary", disabled=uploaded is None, use_container_width=True)
+        with st.container(key="generate_cta"):
+            generate = st.button("Generate Report", type="primary", disabled=uploaded is None, use_container_width=True)
+            if uploaded is None:
+                st.caption("Upload a video to enable report generation.")
 
     if generate:
         try:

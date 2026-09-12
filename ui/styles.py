@@ -12,7 +12,20 @@ h1,h2,h3 {letter-spacing:-.035em;color:var(--ink);}
 .v2k-dot {width:7px;height:7px;border-radius:50%;background:#27a66f;display:inline-block}.v2k-dot.warn{background:#d89b2b}
 .model-row {border:1px solid var(--line);border-radius:13px;padding:13px 14px;margin:9px 0;background:#fbfcfe}.model-role{font-size:.76rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}.model-name{font-weight:700;margin-top:4px}.model-meta{font-size:.8rem;color:var(--muted);margin-top:2px}
 div[data-testid="stFileUploader"] section {min-height:150px;border:1.5px dashed #aeb9cb;border-radius:14px;background:#fbfcff}div[data-testid="stFileUploader"] section:hover{border-color:var(--accent);background:#f7f9ff}
-.stButton>button[kind="primary"] {min-height:48px;border-radius:11px;font-weight:700;background:var(--accent);box-shadow:0 7px 18px rgba(51,92,255,.2)}
+.stButton>button[kind="primary"] {border-radius:10px;font-weight:680;background:var(--accent)}
+.st-key-generate_cta {margin-top:12px}
+.st-key-generate_cta .stButton>button {
+  min-height:42px;height:42px;padding:0 18px;border-radius:10px;
+  font-size:.92rem;font-weight:680;letter-spacing:.005em;
+  box-shadow:0 4px 12px rgba(51,92,255,.14);
+  transition:transform .15s ease,box-shadow .15s ease,background .15s ease;
+}
+.st-key-generate_cta .stButton>button:not(:disabled):hover {
+  transform:translateY(-1px);box-shadow:0 6px 15px rgba(51,92,255,.2);background:#294ee8;
+}
+.st-key-generate_cta .stButton>button:disabled {
+  background:#e8ecf3;color:#8b96a8;border-color:#dfe4ec;box-shadow:none;opacity:1;
+}
 .stDownloadButton>button {min-height:46px;border-radius:11px;font-weight:700}
 div[data-baseweb="select"]>div, .stTextInput input {border-radius:10px!important}
 div[data-testid="stMetric"] {background:white;border:1px solid var(--line);padding:14px;border-radius:13px}
