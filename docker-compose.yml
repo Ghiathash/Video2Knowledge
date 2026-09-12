@@ -1,0 +1,23 @@
+services:
+  video2knowledge:
+    build: .
+    ports:
+      - "8501:8501"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      VIDEO2KNOWLEDGE_OUTPUT_DIR: /app/data/output
+      HF_HOME: /app/models/huggingface
+      LOCAL_ASR_DEVICE: cpu
+      LOCAL_ASR_COMPUTE_TYPE: int8
+    volumes:
+      - ./data/output:/app/data/output
+      - ./models:/app/models
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8501/_stcore/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3

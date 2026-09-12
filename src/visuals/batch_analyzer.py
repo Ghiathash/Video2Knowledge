@@ -10,6 +10,7 @@ def analyze_ranked_visuals(
     transcript_segments: list[TranscriptSegment],
     context_window: float = 10.0,
     checkpoint_path=None,
+    provider=None,
 ) -> list[VisualAnalysis]:
 
     results = (
@@ -36,10 +37,14 @@ def analyze_ranked_visuals(
             window=context_window,
         )
 
-        result = analyze_visual(
-            image_path=visual.path,
-            timestamp=visual.timestamp,
-            transcript_context=transcript_context,
+        result = (
+            provider.analyze(visual.path, visual.timestamp, transcript_context)
+            if provider is not None
+            else analyze_visual(
+                image_path=visual.path,
+                timestamp=visual.timestamp,
+                transcript_context=transcript_context,
+            )
         )
 
         results.append(result)

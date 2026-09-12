@@ -8,3 +8,4 @@ pydantic
 python-dotenv
 reportlab
 Pillow
+streamlit

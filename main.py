@@ -2,13 +2,16 @@
 import json
 import subprocess
 import time
-from dataclasses import asdict, is_dataclass
+from contextvars import ContextVar
+from dataclasses import asdict, is_dataclass, replace
 from pathlib import Path
+from typing import Callable
+
+from dotenv import load_dotenv
 
 from src.ingestion.video_loader import load_video
 from src.preprocessing.media_preprocessor import preprocess_video
 
-from src.transcription.transcriber import transcribe_audio
 from src.transcription.writer import save_transcript_json
 
 from src.segmentation.segmenter import segment_transcript
@@ -26,10 +29,8 @@ from src.visuals.writer import save_visual_analyses
 from src.alignment.aligner import align_visuals_to_sections
 from src.alignment.writer import save_aligned_sections
 
-from src.synthesis.synthesizer import synthesize_report
 from src.synthesis.writer import save_knowledge_report
 
-from src.verification.faithfulness import verify_report
 from src.verification.writer import save_verification_audit
 
 from src.reporting.pdf_generator import generate_pdf_report
@@ -39,6 +40,13 @@ from src.schemas.section import TranscriptSection
 from src.schemas.transcript import TranscriptResult, TranscriptSegment
 from src.schemas.visual import CandidateFrame, RankedVisual
 from src.visuals.writer import load_visual_analyses
+from src.providers import (
+    ExecutionProfile, ProviderConfig, ProviderKind, build_providers, resolve_profile,
+)
+
+
+load_dotenv()
+_PROGRESS_CALLBACK = ContextVar("video2knowledge_progress", default=None)
 
 
 def parse_args():
@@ -132,6 +140,17 @@ def parse_args():
             "Useful for testing part of a very long video."
         ),
     )
+
+    parser.add_argument(
+        "--mode", choices=[item.value for item in ExecutionProfile], default="smart",
+        help="Execution profile (default: smart). Existing CLI usage remains valid.",
+    )
+    parser.add_argument("--vision-provider", choices=["gemini", "ollama"])
+    parser.add_argument("--synthesis-provider", choices=["gemini", "ollama"])
+    parser.add_argument("--verification-provider", choices=["gemini", "ollama"])
+    parser.add_argument("--vision-model")
+    parser.add_argument("--synthesis-model")
+    parser.add_argument("--verification-model")
 
     return parser.parse_args()
 
@@ -256,6 +275,9 @@ def _stage(
     total: int,
     name: str,
 ):
+    callback = _PROGRESS_CALLBACK.get()
+    if callback is not None:
+        callback(number, total, name)
     print()
     print("=" * 65)
     print(
@@ -378,8 +400,30 @@ def _find_audio(
     )
 
 
-def main():
-    args = parse_args()
+def run_pipeline(args=None, progress_callback=None):
+    _PROGRESS_CALLBACK.set(progress_callback)
+    args = parse_args() if args is None else args
+
+    custom = None
+    profile = ExecutionProfile(args.mode)
+    if profile is ExecutionProfile.CUSTOM:
+        required = (args.vision_provider, args.synthesis_provider, args.verification_provider)
+        if not all(required):
+            raise ValueError("Custom mode requires all three provider selections.")
+        custom = ProviderConfig(
+            ProviderKind.LOCAL_WHISPER,
+            ProviderKind(args.vision_provider),
+            ProviderKind(args.synthesis_provider),
+            ProviderKind(args.verification_provider),
+            args.model_size, args.vision_model, args.synthesis_model,
+            args.verification_model, args.device, args.compute_type,
+        )
+    provider_config = resolve_profile(profile, custom=custom)
+    provider_config = replace(
+        provider_config, asr_model=args.model_size,
+        device=args.device, compute_type=args.compute_type,
+    )
+    providers = build_providers(provider_config)
 
     total_stages = 11
 
@@ -493,13 +537,7 @@ def main():
         transcript = _load_transcript(transcript_path)
         print("Reusing transcript checkpoint.")
     else:
-        transcript = transcribe_audio(
-            audio_path=audio_path,
-            model_size=args.model_size,
-            device=args.device,
-            compute_type=args.compute_type,
-            language=language,
-        )
+        transcript = providers.asr.transcribe(audio_path, language=language)
         save_transcript_json(transcript, transcript_path)
 
     print(
@@ -691,6 +729,7 @@ def main():
             ),
             context_window=10.0,
             checkpoint_path=visual_analysis_path,
+            provider=providers.vision,
         )
         knowledge_visuals = [visual for visual in analyses if visual.contains_knowledge]
         save_visual_analyses(knowledge_visuals, visual_analysis_path)
@@ -762,9 +801,8 @@ def main():
     if _valid_json(draft_report_path):
         print("Reusing synthesis checkpoint.")
     else:
-        draft_report = synthesize_report(
-            str(aligned_path),
-            checkpoint_path=str(report_dir / "synthesis_checkpoint.json"),
+        draft_report = providers.synthesis.synthesize(
+            str(aligned_path), str(report_dir / "synthesis_checkpoint.json")
         )
         save_knowledge_report(draft_report, draft_report_path)
 
@@ -773,17 +811,9 @@ def main():
     if _valid_json(verified_report_path) and _valid_json(audit_path):
         print("Reusing verified report checkpoint.")
     else:
-        verified_report, audit = verify_report(
-            aligned_sections_path=(
-                str(aligned_path)
-            ),
-            draft_report_path=(
-                str(draft_report_path)
-            ),
-            checkpoint_path=str(
-                report_dir
-                / "verification_checkpoint.json"
-            ),
+        verified_report, audit = providers.verification.verify(
+            str(aligned_path), str(draft_report_path),
+            str(report_dir / "verification_checkpoint.json"),
         )
         save_knowledge_report(verified_report, verified_report_path)
         save_verification_audit(audit, audit_path)
@@ -896,6 +926,21 @@ def main():
     print(
         f"PDF: {pdf_path}"
     )
+
+    return {
+        "evaluation": evaluation,
+        "output_dir": output_root,
+        "pdf_path": pdf_path,
+        "elapsed_seconds": elapsed,
+        "provider_summary": provider_config.summary(),
+        "sections_count": len(sections),
+        "visual_candidates_count": len(unique_candidates),
+        "knowledge_visuals_count": len(knowledge_visuals),
+    }
+
+
+def main():
+    run_pipeline()
 
 
 if __name__ == "__main__":

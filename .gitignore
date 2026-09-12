@@ -21,6 +21,8 @@ output.jpg
 # Local model/download caches
 .cache/
 models/
+data/uploads/
+.streamlit/secrets.toml
 
 # Editor and OS files
 .idea/

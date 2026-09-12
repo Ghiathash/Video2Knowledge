@@ -1,0 +1,6 @@
+services:
+  video2knowledge:
+    gpus: all
+    environment:
+      LOCAL_ASR_DEVICE: cuda
+      LOCAL_ASR_COMPUTE_TYPE: float16

@@ -1,97 +1,175 @@
 # Video2Knowledge
 
-Transform educational videos into grounded, visual knowledge reports.
+Turn educational videos into structured, visual knowledge reports.
 
-Video2Knowledge is an AI engineering project that turns a lecture or tutorial into a structured PDF. It combines speech, topic structure, and important on-screen material instead of treating the transcript as the whole source of truth.
+Video2Knowledge is a modular multimodal application that converts a video into a grounded PDF: local media processing and speech recognition produce a transcript, hybrid visual extraction finds useful frames, configurable AI providers interpret and synthesize the evidence, a verification pass checks faithfulness, and ReportLab builds the final report.
 
-## Why I built it
+## Why It Exists
 
-Educational videos communicate through two channels: narration and visuals. Diagrams, equations, tables, code, whiteboards, and UI demonstrations often carry information that speech-only summarizers miss. I built Video2Knowledge to explore how a multimodal pipeline can preserve both while keeping generated claims traceable to evidence.
+Educational videos communicate through spoken explanation and through code, diagrams, charts, equations, slides, whiteboards, architecture drawings, and UI demonstrations. A transcript-only summary loses much of that second channel. Video2Knowledge aligns transcript and visual evidence so the report can preserve both.
 
-## Core features
+## Features
 
-- Faster Whisper transcription with configurable model, device, compute type, and language
-- TF-IDF-based lexical transcript segmentation
-- High-recall candidate generation from scene changes and transcript visual cues
-- Candidate fusion, near-duplicate removal, and visual-importance ranking
-- Gemini visual understanding using local transcript context
-- Temporal and semantic transcript–visual alignment
-- Section-isolated grounded synthesis and a separate faithfulness-verification pass
-- Numerical grounding checks for generated content
-- PDF output using presentation frames re-extracted from the source video
-- Per-run file checkpoints and structural evaluation
+- Local video validation, decoding, audio extraction, and frame sampling
+- Local Faster Whisper transcription with CPU and CUDA options
+- Hybrid scene-change and transcript-guided visual candidate extraction
+- Near-duplicate removal and visual-importance ranking
+- Knowledge analysis for code, diagrams, charts, equations, slides, whiteboards, and UI frames
+- Temporal and semantic transcript-visual alignment
+- Grounded report synthesis, numerical validation, and faithfulness verification
+- Full-resolution source-frame PDF generation
+- Run-local checkpoints, resume, and isolated outputs
+- Simple Streamlit UI and backward-compatible CLI
+- Smart, Private / Offline, Cloud, and Advanced execution profiles
+- Pluggable Gemini and local Ollama providers
+- Standard CPU Docker and optional NVIDIA GPU Compose configuration
+- Offline unit tests and GitHub Actions CI
 
-## Architecture and pipeline
+## Execution Modes
+
+### Smart — Recommended
+
+The default for normal users. It keeps ASR, video processing, frame extraction, and PDF generation local. When `GEMINI_API_KEY` is configured, visual intelligence, synthesis, and verification use Gemini. Without Gemini, Smart uses configured local Ollama models; if neither setup is ready, it shows an actionable error rather than silently degrading quality.
+
+### Private / Offline
+
+Uses Faster Whisper plus configured Ollama vision and language models. No API key is required and video evidence stays on the machine during processing. Ollama and its models must be installed beforehand; the application never silently downloads multi-gigabyte models. A first model installation requires network access, after which processing can operate offline.
+
+### Cloud
+
+Uses Gemini for vision, synthesis, and verification. Speech recognition remains local because a cloud ASR provider is not implemented. A Gemini API key is required.
+
+### Advanced
+
+Lets technical users choose Gemini or Ollama independently for visual understanding, synthesis, and verification. Only implemented providers are shown.
+
+## Architecture
 
 ```mermaid
 flowchart LR
-    A[Video] --> B[Ingestion]
-    B --> C[Preprocessing]
-    C --> D[ASR]
-    D --> E[Segmentation]
-    E --> F[Visual Candidate Generation]
-    F --> G[Deduplication & Ranking]
-    G --> H[VLM Visual Understanding]
-    H --> I[Transcript-Visual Alignment]
-    I --> J[Knowledge Synthesis]
-    J --> K[Faithfulness Verification]
-    K --> L[PDF Report]
-    L --> M[Evaluation]
+    A[Video] --> B[Ingestion and local preprocessing]
+    B --> C[ASR]
+    B --> D[Visual candidate extraction]
+    C --> E[Transcript segmentation]
+    D --> F[Visual intelligence]
+    E --> G[Transcript-visual alignment]
+    F --> G
+    G --> H[Grounded synthesis]
+    H --> I[Faithfulness verification]
+    I --> J[Local PDF report]
+
+    P[Provider layer] --> C
+    P --> F
+    P --> H
+    P --> I
+    L[Local: Faster Whisper and Ollama] --> P
+    M[Cloud: Gemini] --> P
 ```
 
-The code is organized by pipeline responsibility under `src/`: ingestion, preprocessing, transcription, segmentation, visual processing, alignment, synthesis, verification, reporting, and evaluation. `main.py` composes those modules into one CLI workflow.
+`src.application.service` is the UI-independent application boundary. It validates inputs, invokes the same pipeline used by the CLI, returns a structured result, and reports real stage progress through a callback. Provider protocols describe ASR, vision, synthesis, and verification capabilities; the factory validates each execution profile and creates only supported implementations.
 
-## Engineering decisions
+Candidate images—not full videos—are sent to a cloud vision provider, together with nearby transcript context. Analysis assets remain separate from full-resolution source frames extracted locally for the PDF.
 
-Candidate generation favors recall: scene-change detection finds visually new material, while transcript-guided extraction catches moments explicitly referring to a diagram, equation, table, screen, or related visual. Fusion combines overlapping evidence, perceptual comparison removes near-duplicates, and ranking limits costly VLM calls.
+## Screenshots
 
-Each visual is analyzed with nearby transcript context, then aligned to a section using time and TF-IDF similarity. Synthesis receives one section's evidence at a time, which limits accidental leakage from unrelated parts of the video. Generated numerical claims must occur in trusted transcript or visible-text evidence.
-
-Faithfulness verification is a distinct pass. It checks semantic relationships—including conjunctions, sequence, conditions, and causality—and corrects unsupported claims. This matters because a fluent summary can still reverse an `AND`/`OR` relationship or strengthen a claim beyond its evidence.
-
-Analysis assets and presentation assets are deliberately separate. Candidate images are optimized for selection and understanding; PDF frames are extracted again at the chosen timestamps from the source video, preserving aspect ratio. A 2× Lanczos resize and mild unsharp mask improve presentation, but do not reconstruct missing detail.
+Screenshot slots are reserved under `docs/assets/` for the home, processing, result, and advanced-mode views. No fabricated screenshots are included.
 
 ## Installation
 
-Requirements: Python 3.10+, FFmpeg/FFprobe on `PATH`, and a Gemini API key. A CUDA GPU is optional but useful for ASR.
+### Local development
 
-```bash
+Requirements: Python 3.10+, FFmpeg/FFprobe on `PATH`, and optionally an NVIDIA CUDA environment.
+
+```powershell
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
+copy .env.example .env
 ```
 
-Create a local `.env` file (it is ignored by Git):
+### Web UI
 
-```dotenv
-GEMINI_API_KEY=your_key_here
-GEMINI_MODEL=your_available_gemini_model
+```powershell
+streamlit run ui/streamlit_app.py
 ```
 
-## Usage
+Open [http://localhost:8501](http://localhost:8501).
+
+### Docker (CPU)
 
 ```bash
-python main.py --input <video> --output <output-directory>
+docker compose up --build
 ```
 
-Example full run:
+The standard image uses CPU Faster Whisper and supports Smart/Cloud mode with Gemini, plus compatible local processing when an Ollama endpoint is reachable and models are installed.
+
+### Docker with NVIDIA GPU
+
+Install the NVIDIA driver, Docker Engine/Desktop GPU support, and NVIDIA Container Toolkit where required, then run:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build
+```
+
+The GPU file requests NVIDIA devices and switches Faster Whisper to CUDA. The CPU deployment does not depend on it.
+
+## Configuration
+
+Copy `.env.example` to `.env`; `.env` is ignored by Git. API calls always remain server-side.
+
+| Variable | Purpose |
+|---|---|
+| `VIDEO2KNOWLEDGE_OUTPUT_DIR` | Base directory for isolated UI runs |
+| `GEMINI_API_KEY` | Required for Gemini providers |
+| `GEMINI_MODEL` | Shared Gemini fallback model |
+| `GEMINI_VISION_MODEL` | Optional vision-specific Gemini model |
+| `GEMINI_LLM_MODEL` | Optional synthesis-specific Gemini model |
+| `GEMINI_VERIFICATION_MODEL` | Optional verification-specific Gemini model |
+| `LOCAL_ASR_MODEL` | Faster Whisper model name |
+| `LOCAL_ASR_DEVICE` | `cpu` or `cuda` |
+| `LOCAL_ASR_COMPUTE_TYPE` | Faster Whisper compute type |
+| `LOCAL_VISION_MODEL` | Installed Ollama multimodal model |
+| `LOCAL_LLM_MODEL` | Installed Ollama language model |
+| `LOCAL_VERIFICATION_MODEL` | Optional separate Ollama verifier model |
+| `OLLAMA_BASE_URL` | Local/server Ollama endpoint |
+| `HF_HOME` | Persistent Faster Whisper/Hugging Face cache |
+
+## Local Models
+
+Install [Ollama](https://ollama.com/) separately and explicitly select models appropriate for your hardware:
+
+```bash
+ollama pull <vision-model>
+ollama pull <language-model>
+```
+
+Then set `LOCAL_VISION_MODEL` and `LOCAL_LLM_MODEL`. The vision model must support image input. Quantized models are generally more practical on consumer hardware, but exact memory needs depend on model and context size. CPU inference is supported where the selected model supports it and may be slow. CUDA out-of-memory or unavailable-server failures are converted into concise application errors with expandable diagnostics in the UI.
+
+For Docker, point `OLLAMA_BASE_URL` at an Ollama service reachable from the container (for example `http://host.docker.internal:11434` with Docker Desktop). Ollama is intentionally not bundled into the standard image.
+
+## CLI
+
+Existing commands remain valid:
 
 ```bash
 python main.py --input data/input/test.mp4 --output data/output/test --max-visuals 40
 ```
 
-Bound a long video to its first 20 minutes:
+Select an execution profile when needed:
 
 ```bash
-python main.py --input data/input/test1.mp4 --output data/output/test1 --duration 1200 --max-visuals 40
+python main.py --input video.mp4 --output data/output/run --mode local --device cpu --compute-type int8
+python main.py --input video.mp4 --output data/output/run --mode cloud
+python main.py --input video.mp4 --output data/output/run --mode custom --vision-provider gemini --synthesis-provider ollama --verification-provider gemini --synthesis-model llama3.2
 ```
 
-Use `python main.py --help` for language, ASR, sampling, scene detection, candidate spacing, and time-range options. Existing valid stage outputs inside the supplied run directory are reused on restart.
+Use `python main.py --help` for all existing sampling, scene, ASR, time-range, and provider options.
 
-## Output structure
+## Output Structure
 
 ```text
-data/output/<run>/
+data/output/<run-id>/
+├── input/                         # UI uploads only
 ├── audio/audio.wav
 ├── frames/sampled/
 ├── transcript/transcript.json
@@ -108,36 +186,63 @@ data/output/<run>/
     └── video2knowledge_report.pdf
 ```
 
-Every run is isolated under its requested output directory, including verification checkpoints and report-frame caches.
-
-## Evaluation
-
-The evaluator checks artifact presence and structural consistency: section coverage, valid ranges, non-empty summaries and key points, aligned visual references, duplicate report visuals, and PDF creation. It reports real failures rather than manufacturing a pass. This is pipeline/structural QA, not a large benchmark of summary quality.
-
-Run the automated tests with:
+## Testing
 
 ```bash
 pytest -q
+python -m compileall -q src ui main.py
+python main.py --help
 ```
 
-## Known limitations
+Cloud APIs are mocked or bypassed in unit tests; CI does not require secrets. CI also creates deterministic test media, validates Compose files, and builds the standard CPU image.
 
-- Visual extraction remains heuristic and may miss gradual or subtle changes.
-- The lexical segmentation baseline uses TF-IDF rather than a learned topic model.
-- PDF frame readability depends on source-video quality.
-- Long videos can require substantial ASR, VLM/API runtime, and API usage cost.
-- Evaluation currently focuses on pipeline and structural correctness.
+## Project Structure
 
-## Future improvements
+```text
+src/application/       Service layer and structured results
+src/providers/         Protocols, profile resolution, hardware detection, providers
+src/ingestion/         Input validation and metadata
+src/preprocessing/     Local audio and frame extraction
+src/transcription/     Faster Whisper implementation
+src/segmentation/      TF-IDF transcript segmentation
+src/visuals/           Candidate extraction, ranking, and analysis
+src/alignment/         Temporal/semantic alignment
+src/synthesis/         Grounded Gemini synthesis implementation
+src/verification/      Faithfulness and numeric checks
+src/reporting/         Full-resolution PDF generation
+src/evaluation/        Structural QA
+ui/                    Streamlit interface
+tests/                 Offline regression and architecture tests
+```
 
-- Calibrate candidate ranking across different instructional formats
-- Add richer evaluation datasets and human faithfulness review
-- Improve retry/backoff and quota-aware execution around API stages
-- Measure visual recall and section-boundary quality independently
+## Technology Stack
 
-## Tech stack
+Python, Streamlit, Faster Whisper, FFmpeg, OpenCV, NumPy, scikit-learn, Google Gen AI SDK, Ollama HTTP API, Pydantic, Pillow, ReportLab, pytest, Docker, and GitHub Actions.
 
-Python, Faster Whisper, FFmpeg, OpenCV, NumPy, scikit-learn, Google Gen AI SDK, Pydantic, Pillow, and ReportLab.
+## Privacy
+
+- **Private / Offline:** AI inference uses local Faster Whisper and Ollama. Models must already be installed for fully disconnected use.
+- **Cloud:** selected frames, nearby transcript context, and aligned evidence are sent to Gemini; preprocessing and PDF generation remain local.
+- **Smart:** uses the cloud hybrid when Gemini is configured, otherwise uses ready local configuration and tells the user which providers were selected.
+
+Uploaded files are sanitized and stored only inside unique run directories. Subprocesses use argument lists rather than interpolated shell commands. Credentials are never written into outputs or browser code.
+
+## Limitations
+
+- URL and YouTube ingestion are not implemented; the UI disables that path.
+- Local model quality and JSON reliability depend on the selected Ollama models.
+- Visual extraction is heuristic, and segmentation uses a TF-IDF baseline.
+- PDF readability depends on source-video quality.
+- Very long videos can require significant compute and provider usage.
+- Evaluation focuses on pipeline structure and grounding checks rather than a large quality benchmark.
+
+## Future Work
+
+- More cloud and local providers, including cloud ASR
+- Richer provider usage/cost metadata and automatic routing
+- Visual-recall and human-faithfulness benchmarks
+- Batch processing and robust URL ingestion
+- More configurable PDF layouts and a hosted service layer
 
 ## License
 

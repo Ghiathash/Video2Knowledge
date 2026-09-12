@@ -1,15 +1,20 @@
-I built Video2Knowledge because educational videos contain important information not only in speech, but also in diagrams, tables, equations, slides, code, whiteboards, and UI demonstrations.
+Educational videos do not store knowledge in one place.
 
-Transcript-only summarization can miss that second channel entirely. Video2Knowledge combines speech-to-text, lexical topic segmentation, hybrid visual candidate extraction, visual understanding, transcript–visual alignment, grounded synthesis, and faithfulness verification. The final output is a structured PDF that pairs grounded knowledge with relevant frames re-extracted from the source video.
+Some of it is spoken. Some of it lives in diagrams, equations, code, tables, slides, whiteboards, and software demonstrations. That was the problem behind Video2Knowledge: a transcript alone is not enough to produce a useful study report.
 
-This was also a practical learning project around ASR, NLP segmentation, multimodal systems, visual understanding, grounded generation, and hallucination/faithfulness verification.
+I built a multimodal pipeline that combines local speech recognition, lexical transcript segmentation, hybrid visual candidate extraction, visual understanding, transcript–visual alignment, grounded synthesis, faithfulness verification, and PDF generation.
 
-The clearest lesson was: “Generating a plausible summary is not the same as generating a faithful one.”
+The architecture now supports a simple Smart mode as well as Private, Cloud, and Advanced configurations. Media processing, frame extraction, and PDF rendering stay local. AI-dependent stages use small provider interfaces, so the same pipeline can run with local Faster Whisper and configurable Ollama models, Gemini, or a hybrid of both.
 
-During development, the system exposed cases where a model changed semantic relationships—for example, turning an AND relationship into OR. That motivated a dedicated verification layer which checks the draft against transcript and visible-text evidence before producing the report.
+Two engineering details mattered more than I initially expected:
 
-The visual extraction is still heuristic, and the current evaluation focuses on pipeline and structural quality rather than claiming benchmark-level performance. But it has been a useful exercise in designing an AI pipeline where evidence, intermediate artifacts, and failure modes stay visible.
+- Long video workflows must be resumable. Transcription, frame analysis, synthesis, and verification use run-local checkpoints so a quota limit or connection failure does not discard completed work.
+- Generating a plausible summary is not the same as generating a faithful one. I saw model output change semantic relationships such as AND/OR and introduce unsupported numbers, which motivated explicit numerical grounding and a verifier that cannot overwrite a safer draft with an unsupported rewrite.
 
-I’d welcome technical feedback, especially on multimodal evaluation and visual-recall strategies.
+I tested the pipeline on real educational videos covering animated neural-network explanations and programming/IDE content. The project also has offline unit tests, a Streamlit interface, CPU Docker packaging, an optional NVIDIA GPU configuration, and GitHub CI.
 
-#ArtificialIntelligence #GenerativeAI #MultimodalAI #MachineLearning #Python #AIEngineering
+It is still an engineering portfolio project rather than a claim of perfect summarization: visual extraction is heuristic, local quality depends on the selected models, and the current evaluation is mainly structural and grounding-focused.
+
+I would value technical feedback on multimodal evaluation, visual recall, and practical local/cloud routing.
+
+#MultimodalAI #AIEngineering #MachineLearning #GenerativeAI #Python
