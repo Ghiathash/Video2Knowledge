@@ -1,0 +1,10 @@
+pytest
+faster-whisper
+opencv-python
+numpy
+scikit-learn
+google-genai
+pydantic
+python-dotenv
+reportlab
+Pillow

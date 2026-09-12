@@ -1,0 +1,29 @@
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Generated media and pipeline artifacts
+data/output/
+data/input/*.mp4
+data/input/*.mkv
+data/input/*.mov
+data/input/*.avi
+data/input/*.webm
+output.jpg
+
+# Local model/download caches
+.cache/
+models/
+
+# Editor and OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
