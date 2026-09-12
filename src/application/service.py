@@ -9,6 +9,7 @@ import uuid
 from main import run_pipeline
 from src.providers.config import ExecutionProfile, ProviderConfig
 from src.providers.hardware import detect_hardware
+from src.ingestion.url_video import DownloadedVideo, download_video_from_url
 
 
 @dataclass
@@ -55,6 +56,17 @@ def save_uploaded_file(run_dir: Path, filename: str, content: bytes) -> Path:
     return target
 
 
+def prepare_url_source(
+    url: str,
+    output_base: str | Path,
+    progress_callback=None,
+) -> tuple[str, Path, DownloadedVideo]:
+    """Create an isolated run and download its public URL input."""
+    run_id, run_dir = create_run_directory(output_base)
+    video = download_video_from_url(url, run_dir, progress_callback)
+    return run_id, run_dir, video
+
+
 def _arguments(
     input_path: Path,
     output_dir: Path,
@@ -77,6 +89,7 @@ def _arguments(
         min_candidate_gap=options.get("min_candidate_gap", 2.0),
         max_visuals=options.get("max_visuals", 40), start=options.get("start", 0.0),
         duration=options.get("duration"), mode=(ExecutionProfile.CUSTOM.value if config else profile.value),
+        url=None,
         vision_provider=config.vision_provider.value if config else None,
         synthesis_provider=config.synthesis_provider.value if config else None,
         verification_provider=config.verification_provider.value if config else None,

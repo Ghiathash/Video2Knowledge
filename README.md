@@ -11,6 +11,7 @@ Educational videos communicate through spoken explanation and through code, diag
 ## Features
 
 - Local video validation, decoding, audio extraction, and frame sampling
+- Public video URL ingestion through yt-dlp, including YouTube and other supported sites
 - Local Faster Whisper transcription with CPU and CUDA options
 - Hybrid scene-change and transcript-guided visual candidate extraction
 - Near-duplicate removal and visual-importance ranking
@@ -161,6 +162,14 @@ Existing commands remain valid:
 python main.py --input data/input/test.mp4 --output data/output/test --max-visuals 40
 ```
 
+Process one public video URL through the same pipeline:
+
+```bash
+python main.py --url "VIDEO_URL" --output data/output/url-run
+```
+
+`--input` and `--url` are mutually exclusive. In the web UI, choose **Video URL**, paste a public URL, select **Load Video**, review its duration and source information, then generate the report. URL ingestion uses the yt-dlp Python API with playlist downloads disabled.
+
 Select an execution profile when needed:
 
 ```bash
@@ -175,7 +184,7 @@ Use `python main.py --help` for all existing sampling, scene, ASR, time-range, a
 
 ```text
 data/output/<run-id>/
-├── input/                         # UI uploads only
+├── input/                         # Uploaded or downloaded source video
 ├── audio/audio.wav
 ├── frames/sampled/
 ├── transcript/transcript.json
@@ -223,7 +232,7 @@ tests/                 Offline regression and architecture tests
 
 ## Technology Stack
 
-Python, Streamlit, Faster Whisper, FFmpeg, OpenCV, NumPy, scikit-learn, Google Gen AI SDK, Ollama HTTP API, Pydantic, Pillow, ReportLab, pytest, Docker, and GitHub Actions.
+Python, Streamlit, yt-dlp, Faster Whisper, FFmpeg, OpenCV, NumPy, scikit-learn, Google Gen AI SDK, Ollama HTTP API, Pydantic, Pillow, ReportLab, pytest, Docker, and GitHub Actions.
 
 ## Privacy
 
@@ -235,7 +244,7 @@ Uploaded files are sanitized and stored only inside unique run directories. Subp
 
 ## Limitations
 
-- URL and YouTube ingestion are not implemented; the UI disables that path.
+- URL support depends on the sites and public formats supported by the installed yt-dlp version; authenticated or DRM-protected videos are not supported.
 - Local model quality and JSON reliability depend on the selected Ollama models.
 - Visual extraction is heuristic, and segmentation uses a TF-IDF baseline.
 - PDF readability depends on source-video quality.
@@ -247,7 +256,7 @@ Uploaded files are sanitized and stored only inside unique run directories. Subp
 - More cloud and local providers, including cloud ASR
 - Richer provider usage/cost metadata and automatic routing
 - Visual-recall and human-faithfulness benchmarks
-- Batch processing and robust URL ingestion
+- Batch processing and optional authenticated-source integrations
 - More configurable PDF layouts and a hosted service layer
 
 ## License

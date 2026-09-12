@@ -9,3 +9,4 @@ python-dotenv
 reportlab
 Pillow
 streamlit
+yt-dlp

@@ -44,6 +44,7 @@ from src.visuals.writer import load_visual_analyses
 from src.providers import (
     ExecutionProfile, ProviderConfig, ProviderKind, build_providers, resolve_profile,
 )
+from src.ingestion.url_video import download_video_from_url
 
 
 load_dotenv()
@@ -55,11 +56,9 @@ def parse_args():
         description="Video2Knowledge full pipeline"
     )
 
-    parser.add_argument(
-        "--input",
-        required=True,
-        help="Input video path",
-    )
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--input", help="Input video path")
+    source.add_argument("--url", help="Public video URL downloaded with yt-dlp")
 
     parser.add_argument(
         "--output",
@@ -450,10 +449,6 @@ def run_pipeline(args=None, progress_callback=None):
 
     total_stages = 11
 
-    input_path = Path(
-        args.input
-    )
-
     output_root = Path(
         args.output
     )
@@ -462,6 +457,17 @@ def run_pipeline(args=None, progress_callback=None):
         parents=True,
         exist_ok=True,
     )
+
+    if getattr(args, "url", None):
+        print("Downloading public video...")
+        downloaded = download_video_from_url(
+            args.url,
+            output_root,
+        )
+        print(f"Downloaded video: {downloaded.title}")
+        input_path = downloaded.path
+    else:
+        input_path = Path(args.input)
 
     if not input_path.exists():
         raise FileNotFoundError(

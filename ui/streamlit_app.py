@@ -1,6 +1,7 @@
 import os
 import sys
 import time
+import traceback
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -10,7 +11,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from dotenv import load_dotenv
 import streamlit as st
 
-from src.application.service import create_run_directory, run_video2knowledge, save_uploaded_file
+from src.application.service import create_run_directory, prepare_url_source, run_video2knowledge, save_uploaded_file
 from src.ingestion.validator import SUPPORTED_VIDEO_EXTENSIONS
 from src.providers import ExecutionProfile, ProviderConfig, ProviderKind
 from src.providers.factory import resolve_profile
@@ -56,6 +57,10 @@ def _secret(name: str, label: str, key: str) -> str | None:
     configured = bool(os.getenv(name))
     value = st.text_input(label, type="password", key=key, placeholder="Configured in environment" if configured else "Session only")
     return value or os.getenv(name)
+
+
+def _select_upload() -> None:
+    st.session_state.active_source = "upload"
 
 
 def _model_picker(role: str, presets: dict, allowed: set[ProviderKind] | None = None) -> tuple[ProviderKind, str, str | None, str | None]:
@@ -149,11 +154,54 @@ def main() -> None:
         with st.container(border=True):
             section_title("Input", "Choose your video", "Upload a local educational video. Files are copied into an isolated run directory.")
             extensions = sorted(ext.lstrip(".") for ext in SUPPORTED_VIDEO_EXTENSIONS)
-            uploaded = st.file_uploader("Upload video", type=extensions, label_visibility="collapsed")
-            if uploaded:
-                st.caption(f"Selected: {uploaded.name}  |  {uploaded.size / (1024 * 1024):.1f} MB")
-            else:
-                st.caption("MP4, MOV, MKV, WebM, or AVI up to 2 GB")
+            upload_tab, url_tab = st.tabs(["Upload Video", "Video URL"])
+            with upload_tab:
+                uploaded = st.file_uploader("Upload video", type=extensions, label_visibility="collapsed", on_change=_select_upload, key="uploaded_video")
+                if uploaded:
+                    st.caption(f"Selected: {uploaded.name}  |  {uploaded.size / (1024 * 1024):.1f} MB")
+                else:
+                    st.caption("MP4, MOV, MKV, WebM, or AVI up to 2 GB")
+            with url_tab:
+                video_url = st.text_input("Paste a video URL", placeholder="https://www.youtube.com/watch?v=...", key="video_url")
+                st.caption("YouTube or another supported public video URL. Playlists and private-network URLs are blocked.")
+                if st.button("Load Video", use_container_width=True, key="load_video_url"):
+                    url_status = st.status("Loading video", expanded=True)
+                    url_progress = st.progress(0, text="Fetching video information...")
+                    last_url_stage = {"value": None}
+
+                    def on_url_progress(stage: str, ratio: float | None, message: str) -> None:
+                        values = {"fetching": 0.08, "downloading": ratio if ratio is not None else 0.35, "preparing": 0.9, "complete": 1.0}
+                        url_progress.progress(float(values.get(stage, 0.1)), text=message)
+                        if last_url_stage["value"] != stage:
+                            url_status.update(label=message)
+                            last_url_stage["value"] = stage
+
+                    try:
+                        output_base = Path(os.getenv("VIDEO2KNOWLEDGE_OUTPUT_DIR", "data/output"))
+                        _, url_run_dir, downloaded = prepare_url_source(video_url, output_base, on_url_progress)
+                        st.session_state.url_source = {"video": downloaded, "run_dir": url_run_dir}
+                        st.session_state.active_source = "url"
+                        url_status.update(label="Video ready", state="complete", expanded=False)
+                        st.rerun()
+                    except Exception as error:
+                        url_progress.empty()
+                        details = traceback.format_exc()
+                        st.session_state.url_error_details = details.replace(video_url, "[video URL]") if video_url else details
+                        url_status.update(label="Could not load video", state="error")
+                        st.error(str(error))
+                        with st.expander("Advanced: Download Logs"):
+                            st.code(st.session_state.url_error_details)
+                prepared_url = st.session_state.get("url_source")
+                if prepared_url and prepared_url["video"].source_url == video_url.strip():
+                    metadata = prepared_url["video"]
+                    st.success("Video loaded and ready for processing.")
+                    meta_columns = st.columns(3)
+                    meta_columns[0].metric("Duration", f"{metadata.duration / 60:.1f} min" if metadata.duration else "Unknown")
+                    meta_columns[1].metric("Source", metadata.source)
+                    meta_columns[2].metric("Resolution", metadata.resolution or "Unknown")
+                    st.markdown(f"**{metadata.title}**")
+                    if metadata.duration and metadata.duration > 3600:
+                        st.warning("Long videos may require significant processing time and model usage.")
 
         with st.container(border=True):
             section_title("Mode", "How should this run?", "Complexity stays hidden unless you choose Advanced.")
@@ -191,17 +239,25 @@ def main() -> None:
                     st.caption("Installed models: " + ", ".join(sorted(installed)))
                 st.caption("Models are never downloaded automatically.")
 
+        prepared_url = st.session_state.get("url_source")
+        url_ready = bool(prepared_url and prepared_url["video"].source_url == st.session_state.get("video_url", "").strip())
+        active_source = st.session_state.get("active_source", "upload")
+        source_ready = uploaded is not None if active_source == "upload" else url_ready
         with st.container(key="generate_cta"):
-            generate = st.button("Generate Report", type="primary", disabled=uploaded is None, use_container_width=True)
-            if uploaded is None:
-                st.caption("Upload a video to enable report generation.")
+            generate = st.button("Generate Report", type="primary", disabled=not source_ready, use_container_width=True)
+            if not source_ready:
+                st.caption("Upload a video or load a public URL to enable report generation.")
 
     if generate:
         try:
             resolve_profile(profile, custom=custom)
-            output_base = Path(os.getenv("VIDEO2KNOWLEDGE_OUTPUT_DIR", "data/output"))
-            _, run_dir = create_run_directory(output_base)
-            input_path = save_uploaded_file(run_dir, uploaded.name, uploaded.getvalue())
+            if active_source == "url":
+                run_dir = prepared_url["run_dir"]
+                input_path = prepared_url["video"].path
+            else:
+                output_base = Path(os.getenv("VIDEO2KNOWLEDGE_OUTPUT_DIR", "data/output"))
+                _, run_dir = create_run_directory(output_base)
+                input_path = save_uploaded_file(run_dir, uploaded.name, uploaded.getvalue())
             started = time.perf_counter()
             progress = st.progress(0, text="Preparing secure run")
             status = st.status("Processing video", expanded=True)
