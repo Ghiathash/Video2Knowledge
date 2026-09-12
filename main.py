@@ -1,5 +1,6 @@
 ﻿import argparse
 import json
+import os
 import subprocess
 import time
 from contextvars import ContextVar
@@ -145,12 +146,16 @@ def parse_args():
         "--mode", choices=[item.value for item in ExecutionProfile], default="smart",
         help="Execution profile (default: smart). Existing CLI usage remains valid.",
     )
-    parser.add_argument("--vision-provider", choices=["gemini", "ollama"])
-    parser.add_argument("--synthesis-provider", choices=["gemini", "ollama"])
-    parser.add_argument("--verification-provider", choices=["gemini", "ollama"])
+    provider_choices = ["gemini", "ollama", "openai-compatible"]
+    parser.add_argument("--vision-provider", choices=provider_choices)
+    parser.add_argument("--synthesis-provider", choices=provider_choices)
+    parser.add_argument("--verification-provider", choices=provider_choices)
     parser.add_argument("--vision-model")
     parser.add_argument("--synthesis-model")
     parser.add_argument("--verification-model")
+    parser.add_argument("--vision-base-url")
+    parser.add_argument("--synthesis-base-url")
+    parser.add_argument("--verification-base-url")
 
     return parser.parse_args()
 
@@ -404,19 +409,37 @@ def run_pipeline(args=None, progress_callback=None):
     _PROGRESS_CALLBACK.set(progress_callback)
     args = parse_args() if args is None else args
 
-    custom = None
+    custom = getattr(args, "provider_config", None)
     profile = ExecutionProfile(args.mode)
-    if profile is ExecutionProfile.CUSTOM:
+    if profile is ExecutionProfile.CUSTOM and custom is None:
         required = (args.vision_provider, args.synthesis_provider, args.verification_provider)
         if not all(required):
             raise ValueError("Custom mode requires all three provider selections.")
+        vision_kind = ProviderKind(args.vision_provider)
+        synthesis_kind = ProviderKind(args.synthesis_provider)
+        verification_kind = ProviderKind(args.verification_provider)
+
+        def endpoint(kind, explicit):
+            if explicit:
+                return explicit
+            return os.getenv("OLLAMA_BASE_URL") if kind is ProviderKind.OLLAMA else os.getenv("OPENAI_COMPATIBLE_BASE_URL")
+
+        def credential(kind):
+            if kind is ProviderKind.GEMINI:
+                return os.getenv("GEMINI_API_KEY")
+            if kind is ProviderKind.OPENAI_COMPATIBLE:
+                return os.getenv("OPENAI_COMPATIBLE_API_KEY")
+            return None
+
         custom = ProviderConfig(
             ProviderKind.LOCAL_WHISPER,
-            ProviderKind(args.vision_provider),
-            ProviderKind(args.synthesis_provider),
-            ProviderKind(args.verification_provider),
+            vision_kind, synthesis_kind, verification_kind,
             args.model_size, args.vision_model, args.synthesis_model,
             args.verification_model, args.device, args.compute_type,
+            endpoint(vision_kind, args.vision_base_url),
+            endpoint(synthesis_kind, args.synthesis_base_url),
+            endpoint(verification_kind, args.verification_base_url),
+            credential(vision_kind), credential(synthesis_kind), credential(verification_kind),
         )
     provider_config = resolve_profile(profile, custom=custom)
     provider_config = replace(

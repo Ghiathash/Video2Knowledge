@@ -56,9 +56,9 @@ class _OllamaClient:
 class OllamaVisionProvider:
     name = "Local Ollama"
 
-    def __init__(self, model: str):
+    def __init__(self, model: str, base_url: str | None = None):
         self.model = model
-        self.client = _OllamaClient(model)
+        self.client = _OllamaClient(model, base_url)
 
     def analyze(self, image_path: Path, timestamp: float, transcript_context: str) -> VisualAnalysis:
         prompt = (
@@ -75,9 +75,9 @@ class OllamaVisionProvider:
 class OllamaLLMProvider:
     name = "Local Ollama"
 
-    def __init__(self, model: str):
+    def __init__(self, model: str, base_url: str | None = None):
         self.model = model
-        self.client = _OllamaClient(model)
+        self.client = _OllamaClient(model, base_url)
 
     def synthesize(self, aligned_sections_path: str, checkpoint_path: str) -> KnowledgeReport:
         sections = json.loads(Path(aligned_sections_path).read_text(encoding="utf-8"))
@@ -104,9 +104,9 @@ class OllamaLLMProvider:
 class OllamaVerificationProvider:
     name = "Local Ollama"
 
-    def __init__(self, model: str):
+    def __init__(self, model: str, base_url: str | None = None):
         self.model = model
-        self.client = _OllamaClient(model)
+        self.client = _OllamaClient(model, base_url)
 
     def verify(self, aligned_sections_path: str, draft_report_path: str, checkpoint_path: str):
         from src.synthesis.synthesizer import _validate_numeric_grounding

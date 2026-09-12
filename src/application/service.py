@@ -76,13 +76,14 @@ def _arguments(
         scene_sample_interval=options.get("scene_sample_interval", 1.0),
         min_candidate_gap=options.get("min_candidate_gap", 2.0),
         max_visuals=options.get("max_visuals", 40), start=options.get("start", 0.0),
-        duration=options.get("duration"), mode=profile.value,
+        duration=options.get("duration"), mode=(ExecutionProfile.CUSTOM.value if config else profile.value),
         vision_provider=config.vision_provider.value if config else None,
         synthesis_provider=config.synthesis_provider.value if config else None,
         verification_provider=config.verification_provider.value if config else None,
         vision_model=config.vision_model if config else None,
         synthesis_model=config.synthesis_model if config else None,
         verification_model=config.verification_model if config else None,
+        provider_config=config,
     )
 
 

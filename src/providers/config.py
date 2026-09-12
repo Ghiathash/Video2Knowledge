@@ -13,10 +13,13 @@ class ProviderKind(str, Enum):
     LOCAL_WHISPER = "local-whisper"
     GEMINI = "gemini"
     OLLAMA = "ollama"
+    OPENAI_COMPATIBLE = "openai-compatible"
 
 
 @dataclass(frozen=True)
 class ProviderConfig:
+    """Independent model/backend configuration for every pipeline role."""
+
     asr_provider: ProviderKind
     vision_provider: ProviderKind
     synthesis_provider: ProviderKind
@@ -27,16 +30,26 @@ class ProviderConfig:
     verification_model: str | None = None
     device: str = "cuda"
     compute_type: str = "float16"
+    vision_base_url: str | None = None
+    synthesis_base_url: str | None = None
+    verification_base_url: str | None = None
+    vision_api_key: str | None = None
+    synthesis_api_key: str | None = None
+    verification_api_key: str | None = None
 
     def summary(self) -> dict[str, str]:
-        labels = {
-            ProviderKind.LOCAL_WHISPER: "Local (Faster Whisper)",
-            ProviderKind.OLLAMA: "Local (Ollama)",
-            ProviderKind.GEMINI: "Cloud (Gemini)",
-        }
+        def label(kind: ProviderKind, model: str | None) -> str:
+            backend = {
+                ProviderKind.LOCAL_WHISPER: "Faster Whisper",
+                ProviderKind.OLLAMA: "Ollama",
+                ProviderKind.GEMINI: "Gemini",
+                ProviderKind.OPENAI_COMPATIBLE: "OpenAI-compatible",
+            }[kind]
+            return f"{model} via {backend}" if model else backend
+
         return {
-            "Speech Recognition": labels[self.asr_provider],
-            "Visual Intelligence": labels[self.vision_provider],
-            "Report Generation": labels[self.synthesis_provider],
-            "Verification": labels[self.verification_provider],
+            "Speech Recognition": label(self.asr_provider, self.asr_model),
+            "Visual Intelligence": label(self.vision_provider, self.vision_model),
+            "Report Generation": label(self.synthesis_provider, self.synthesis_model),
+            "Verification": label(self.verification_provider, self.verification_model),
         }

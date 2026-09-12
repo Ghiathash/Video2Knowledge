@@ -21,7 +21,7 @@ Educational videos communicate through spoken explanation and through code, diag
 - Run-local checkpoints, resume, and isolated outputs
 - Simple Streamlit UI and backward-compatible CLI
 - Smart, Private / Offline, Cloud, and Advanced execution profiles
-- Pluggable Gemini and local Ollama providers
+- Independent Gemini, OpenAI-compatible, and local Ollama model backends
 - Standard CPU Docker and optional NVIDIA GPU Compose configuration
 - Offline unit tests and GitHub Actions CI
 
@@ -29,7 +29,7 @@ Educational videos communicate through spoken explanation and through code, diag
 
 ### Smart — Recommended
 
-The default for normal users. It keeps ASR, video processing, frame extraction, and PDF generation local. When `GEMINI_API_KEY` is configured, visual intelligence, synthesis, and verification use Gemini. Without Gemini, Smart uses configured local Ollama models; if neither setup is ready, it shows an actionable error rather than silently degrading quality.
+The default for normal users. It keeps ASR, video processing, frame extraction, and PDF generation local, then selects from models already configured. Cloud models are preferred when ready; otherwise Smart uses configured Ollama models. If neither setup is ready, it shows an actionable setup message.
 
 ### Private / Offline
 
@@ -37,11 +37,11 @@ Uses Faster Whisper plus configured Ollama vision and language models. No API ke
 
 ### Cloud
 
-Uses Gemini for vision, synthesis, and verification. Speech recognition remains local because a cloud ASR provider is not implemented. A Gemini API key is required.
+Uses configured hosted models for vision, synthesis, and verification. Gemini and generic OpenAI-compatible endpoints are supported; Gemini is not mandatory. Speech recognition remains local because a cloud ASR provider is not implemented.
 
 ### Advanced
 
-Lets technical users choose Gemini or Ollama independently for visual understanding, synthesis, and verification. Only implemented providers are shown.
+Lets technical users choose a model independently for visual understanding, synthesis, and verification. Each model can use Gemini, Ollama, or a different OpenAI-compatible endpoint.
 
 ## Architecture
 
@@ -63,7 +63,7 @@ flowchart LR
     P --> H
     P --> I
     L[Local: Faster Whisper and Ollama] --> P
-    M[Cloud: Gemini] --> P
+    M[Cloud: Gemini or compatible endpoint] --> P
 ```
 
 `src.application.service` is the UI-independent application boundary. It validates inputs, invokes the same pipeline used by the CLI, returns a structured result, and reports real stage progress through a callback. Provider protocols describe ASR, vision, synthesis, and verification capabilities; the factory validates each execution profile and creates only supported implementations.
@@ -101,7 +101,7 @@ Open [http://localhost:8501](http://localhost:8501).
 docker compose up --build
 ```
 
-The standard image uses CPU Faster Whisper and supports Smart/Cloud mode with Gemini, plus compatible local processing when an Ollama endpoint is reachable and models are installed.
+The standard image uses CPU Faster Whisper and supports Smart/Cloud mode with Gemini or an OpenAI-compatible endpoint, plus local processing when Ollama is reachable and models are installed.
 
 ### Docker with NVIDIA GPU
 
@@ -116,6 +116,7 @@ The GPU file requests NVIDIA devices and switches Faster Whisper to CUDA. The CP
 ## Configuration
 
 Copy `.env.example` to `.env`; `.env` is ignored by Git. API calls always remain server-side.
+For interactive runs, non-empty UI values take precedence over environment variables, which take precedence over built-in defaults. Keys entered in the UI remain in the current Streamlit session and are never written to project files.
 
 | Variable | Purpose |
 |---|---|
@@ -125,13 +126,18 @@ Copy `.env.example` to `.env`; `.env` is ignored by Git. API calls always remain
 | `GEMINI_VISION_MODEL` | Optional vision-specific Gemini model |
 | `GEMINI_LLM_MODEL` | Optional synthesis-specific Gemini model |
 | `GEMINI_VERIFICATION_MODEL` | Optional verification-specific Gemini model |
+| `OPENAI_COMPATIBLE_BASE_URL` | Chat Completions API root, normally ending in `/v1` |
+| `OPENAI_COMPATIBLE_API_KEY` | Optional endpoint credential; not required by local compatible servers |
+| `OPENAI_COMPATIBLE_MODEL` | Shared compatible endpoint model ID |
+| `OLLAMA_BASE_URL` | Ollama server URL |
+| `OLLAMA_VISION_MODEL` | Installed local vision model |
+| `OLLAMA_LANGUAGE_MODEL` | Installed local synthesis model |
 | `LOCAL_ASR_MODEL` | Faster Whisper model name |
 | `LOCAL_ASR_DEVICE` | `cpu` or `cuda` |
 | `LOCAL_ASR_COMPUTE_TYPE` | Faster Whisper compute type |
 | `LOCAL_VISION_MODEL` | Installed Ollama multimodal model |
 | `LOCAL_LLM_MODEL` | Installed Ollama language model |
 | `LOCAL_VERIFICATION_MODEL` | Optional separate Ollama verifier model |
-| `OLLAMA_BASE_URL` | Local/server Ollama endpoint |
 | `HF_HOME` | Persistent Faster Whisper/Hugging Face cache |
 
 ## Local Models
@@ -222,8 +228,8 @@ Python, Streamlit, Faster Whisper, FFmpeg, OpenCV, NumPy, scikit-learn, Google G
 ## Privacy
 
 - **Private / Offline:** AI inference uses local Faster Whisper and Ollama. Models must already be installed for fully disconnected use.
-- **Cloud:** selected frames, nearby transcript context, and aligned evidence are sent to Gemini; preprocessing and PDF generation remain local.
-- **Smart:** uses the cloud hybrid when Gemini is configured, otherwise uses ready local configuration and tells the user which providers were selected.
+- **Cloud:** selected frames and relevant transcript evidence are sent only to the configured hosted model backend; preprocessing and PDF generation remain local.
+- **Smart:** chooses a ready configured cloud model or falls back to ready local Ollama models and reports the actual selection.
 
 Uploaded files are sanitized and stored only inside unique run directories. Subprocesses use argument lists rather than interpolated shell commands. Credentials are never written into outputs or browser code.
 
